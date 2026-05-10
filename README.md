@@ -1,3 +1,16 @@
+---
+title: GitMind Backend
+emoji: 🧠
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 8001
+pinned: false
+license: mit
+---
+
+<!-- HF Spaces reads the YAML frontmatter above. GitHub hides it when rendering. -->
+
 # GitMind — Crisis Room
 
 [![CI](https://github.com/muhammad-asifkhan/GitMind/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammad-asifkhan/GitMind/actions/workflows/ci.yml)
