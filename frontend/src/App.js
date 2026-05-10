@@ -20,9 +20,25 @@ const INITIAL_STATUS = {
 
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+// Accept any of:
+//   https://github.com/owner/repo      → unchanged
+//   http://github.com/owner/repo       → coerced to https://
+//   github.com/owner/repo              → prefixed with https://
+//   owner/repo                         → prefixed with https://github.com/
+// Returns '' for empty input so the caller can show its own "please enter" error.
+function normalizeGitHubUrl(input) {
+  const s = (input || '').trim().replace(/\/+$/, '');
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s))         return s.replace(/^http:\/\//i, 'https://');
+  if (/^github\.com\//i.test(s))       return `https://${s}`;
+  if (/^[\w.-]+\/[\w.-]+(\.git)?$/.test(s)) return `https://github.com/${s}`;
+  return `https://${s}`;   // last-resort: assume scheme is the only thing missing
+}
+
 function isValidGitHubUrl(url) {
   try {
-    const u = new URL(url.trim());
+    const u = new URL(url);
     const parts = u.pathname.split('/').filter(Boolean);
     return u.hostname === 'github.com' && parts.length >= 2;
   } catch { return false; }
@@ -30,8 +46,8 @@ function isValidGitHubUrl(url) {
 
 function extractRepoName(url) {
   try {
-    const parts = new URL(url.trim()).pathname.split('/').filter(Boolean);
-    return parts[1] || 'repository';
+    const parts = new URL(url).pathname.split('/').filter(Boolean);
+    return (parts[1] || 'repository').replace(/\.git$/, '');
   } catch { return 'repository'; }
 }
 
@@ -51,7 +67,7 @@ function Spinner() {
 // ── App ────────────────────────────────────────────────────────────────────────
 export default function App() {
   // ── State ──────────────────────────────────────────────────────────────────
-  const [repoUrl,       setRepoUrl]       = useState('https://github.com/OWASP/NodeGoat');
+  const [repoUrl,       setRepoUrl]       = useState('');
   const [urlError,      setUrlError]      = useState('');
   const [activeTab,     setActiveTab]     = useState('diagram');
   const [agentStatus,   setAgentStatus]   = useState(INITIAL_STATUS);
@@ -87,7 +103,7 @@ export default function App() {
 
   // ── Analyze ────────────────────────────────────────────────────────────────
   const handleAnalyze = useCallback(() => {
-    const url = repoUrl.trim();
+    const url = normalizeGitHubUrl(repoUrl);
 
     // client-side validation
     if (!url) {
@@ -95,9 +111,11 @@ export default function App() {
       return;
     }
     if (!isValidGitHubUrl(url)) {
-      setUrlError('Enter a valid GitHub URL — e.g. https://github.com/owner/repo');
+      setUrlError('Enter a valid GitHub repo — e.g. owner/repo, github.com/owner/repo, or the full URL');
       return;
     }
+    // Reflect the canonical URL back into the input so the user sees what we'll fetch
+    if (url !== repoUrl.trim()) setRepoUrl(url);
 
     // reset everything
     cleanup();
@@ -247,7 +265,7 @@ export default function App() {
           <input
             className="gm-input"
             style={{ paddingRight: urlError ? 42 : 16 }}
-            placeholder="https://github.com/owner/repository"
+            placeholder="owner/repo  or  github.com/owner/repo  or  full URL"
             value={repoUrl}
             onChange={e => { setRepoUrl(e.target.value); if (urlError) setUrlError(''); }}
             onKeyDown={e => { if (e.key === 'Enter' && !isAnalyzing) handleAnalyze(); }}

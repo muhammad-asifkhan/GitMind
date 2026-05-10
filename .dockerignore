@@ -1,0 +1,24 @@
+# Keep image small — exclude everything we don't need at runtime.
+**/.git
+**/.github
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.llm_cache
+**/chroma_db
+**/uvicorn.log
+**/frontend.log
+**/.env
+**/.env.local
+
+# Frontend is deployed separately on Vercel
+frontend/
+
+# Docs and metadata are not needed at runtime
+docs/
+README.md
+LICENSE
+.claude/
+.vscode/
+.idea/

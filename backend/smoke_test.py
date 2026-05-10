@@ -21,6 +21,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# CI mode: skip checks that need a real OpenAI key or live network. Set via
+#   python smoke_test.py --ci   OR   SMOKE_CI=1
+_CI = "--ci" in sys.argv or os.getenv("SMOKE_CI") == "1"
+
 _PASS  = "[PASS]"
 _FAIL  = "[FAIL]"
 _errors: list[str] = []
@@ -43,8 +47,12 @@ print("════════════════════════�
 print("[ Environment ]")
 
 api_key = os.getenv("OPENAI_API_KEY", "")
-check("OPENAI_API_KEY is set",         bool(api_key),               "Add to backend/.env")
-check("OPENAI_API_KEY format (sk-...)", api_key.startswith("sk-"),  f"Got prefix: {api_key[:6]!r}")
+if _CI:
+    print(f"  [SKIP]  OPENAI_API_KEY is set (CI mode)")
+    print(f"  [SKIP]  OPENAI_API_KEY format (CI mode)")
+else:
+    check("OPENAI_API_KEY is set",         bool(api_key),               "Add to backend/.env")
+    check("OPENAI_API_KEY format (sk-...)", api_key.startswith("sk-"),  f"Got prefix: {api_key[:6]!r}")
 check("semgrep in PATH",               shutil.which("semgrep") is not None, "pip install semgrep")
 
 # ── 2. ChromaDB ────────────────────────────────────────────────────────────────
@@ -81,7 +89,9 @@ except Exception as exc:
 
 # ── 5. OpenAI API reachability ─────────────────────────────────────────────────
 print("\n[ OpenAI API ]")
-if api_key:
+if _CI:
+    print(f"  [SKIP]  OpenAI API reachable (CI mode — no live network call)")
+elif api_key:
     try:
         from langchain_openai import ChatOpenAI
         llm  = ChatOpenAI(model="gpt-4o-mini", temperature=0, max_tokens=5)
@@ -94,17 +104,20 @@ else:
 
 # ── 6. GitPython clone ─────────────────────────────────────────────────────────
 print("\n[ GitPython ]")
-try:
-    import git
-    dest = tempfile.mkdtemp(prefix="gitmind_smoke_")
-    repo = git.Repo.clone_from(
-        "https://github.com/octocat/Hello-World", dest, depth=1
-    )
-    repo.close()
-    shutil.rmtree(dest, ignore_errors=True)
-    check("GitPython shallow clone (octocat/Hello-World)", True)
-except Exception as exc:
-    check("GitPython shallow clone", False, str(exc))
+if _CI:
+    print(f"  [SKIP]  GitPython shallow clone (CI mode — no live network call)")
+else:
+    try:
+        import git
+        dest = tempfile.mkdtemp(prefix="gitmind_smoke_")
+        repo = git.Repo.clone_from(
+            "https://github.com/octocat/Hello-World", dest, depth=1
+        )
+        repo.close()
+        shutil.rmtree(dest, ignore_errors=True)
+        check("GitPython shallow clone (octocat/Hello-World)", True)
+    except Exception as exc:
+        check("GitPython shallow clone", False, str(exc))
 
 # ── 7. LangGraph graph compiles ────────────────────────────────────────────────
 print("\n[ LangGraph ]")

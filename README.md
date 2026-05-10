@@ -1,6 +1,11 @@
 # GitMind — Crisis Room
 
-Multi-agent repo intelligence system. Paste a GitHub URL → 4 agents run in parallel → architecture diagram, API docs, security findings, chat-with-the-repo. Optional Crisis Mode dramatises a security leak with CEO/Legal/Engineering/Reporter role-play.
+[![CI](https://github.com/muhammad-asifkhan/GitMind/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammad-asifkhan/GitMind/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
+[![React 19](https://img.shields.io/badge/react-19-blue.svg)](https://react.dev)
+
+Multi-agent repo intelligence system. Paste a GitHub URL → 4 agents run in parallel → architecture diagram, API docs, security findings, chat-with-the-repo. Optional Crisis Room: live CEO/Legal/Engineering role-play vs a Reporter on a 45-second timer, with Engineering grounded in the actual offending source via RAG.
 
 Stack: FastAPI · LangGraph · OpenAI GPT-4o-mini · ChromaDB · React · Mermaid · semgrep
 
@@ -96,4 +101,51 @@ npm start                                  # http://localhost:3000
 cd backend && source venv/bin/activate && python smoke_test.py
 ```
 
-Must show **9/9 PASS** before demo.
+Must show **9/9 PASS** before demo. For CI environments without an OpenAI key or network, run with `--ci` (or `SMOKE_CI=1`) to skip the live-network checks.
+
+## Deploy (free tier)
+
+GitMind is split-deploy: frontend on Vercel, backend wherever Docker runs. Both have free tiers that cover demo usage.
+
+### 1 — Backend (any Docker host)
+
+A production-ready [`Dockerfile`](Dockerfile) is at the repo root. It bundles `git`, `semgrep`, and pinned Python deps.
+
+**Hugging Face Spaces (free, persistent):**
+1. Create a new Space → SDK: **Docker** → from your forked repo
+2. In the Space's **Settings → Secrets**, add `OPENAI_API_KEY`
+3. Add a Space variable `CORS_ORIGINS` set to your Vercel URL (e.g. `https://gitmind.vercel.app`)
+4. The Space will auto-build and serve on a public URL
+
+**Google Cloud Run (free tier: 2M requests/month):**
+```bash
+gcloud run deploy gitmind-backend \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars OPENAI_API_KEY=sk-...,CORS_ORIGINS=https://gitmind.vercel.app
+```
+
+**Local Docker (smoke check):**
+```bash
+docker build -t gitmind-backend .
+docker run -p 8001:8001 -e OPENAI_API_KEY=sk-... gitmind-backend
+```
+
+### 2 — Frontend (Vercel)
+
+1. [vercel.com/new](https://vercel.com/new) → import this repo
+2. **Root directory:** `frontend`
+3. **Framework preset:** Create React App (auto-detected via [`frontend/vercel.json`](frontend/vercel.json))
+4. **Environment variable:** `REACT_APP_API_BASE` = your backend URL (e.g. `https://your-space.hf.space`)
+5. Deploy
+
+The frontend's [`api.js`](frontend/src/api.js) auto-derives the WebSocket base from the same env var, so analysis + crisis room work without further config.
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and PR to `main`:
+- Backend: smoke test (CI mode) + import-graph compile check on Python 3.11 and 3.12
+- Frontend: `npm test` + `npm run build` on Node 20
+
+Green badge above means main is in a deployable state.

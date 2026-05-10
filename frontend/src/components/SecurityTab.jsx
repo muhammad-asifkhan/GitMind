@@ -121,7 +121,7 @@ function FindingCard({ finding, idx, onCrisis }) {
               style={{ marginTop: 14, width: '100%', justifyContent: 'center', padding: '10px' }}
               onClick={(e) => { e.stopPropagation(); onCrisis(finding); }}
             >
-              ⚡ Simulate Crisis — What happens when this leaks at 2 a.m.?
+              ⚡ Open Crisis Room — What happens when this leaks at 2 a.m.?
             </button>
           )}
         </div>

@@ -267,16 +267,19 @@ async def ws_crisis(ws: WebSocket):
 
     initial = {
         **_initial_state(""),
-        "security_findings":   findings,
-        "selected_finding_id": active.get("id"),
-        "crisis_messages":     [],
-        "crisis_turn":         0,
+        "security_findings":      findings,
+        "selected_finding_id":    active.get("id"),
+        # Pass the RAG collection through so Engineering can pull real code
+        # for the offending file via search_codebase().
+        "chroma_collection_name": session.get("chroma_collection_name"),
+        "crisis_messages":        [],
+        "crisis_turn":            0,
         # Seed reporter with the exploit story so it always has a signal — without
         # this, the leak heuristic in _base.py only fires ~70% of runs and the UI
         # silently falls back to "Crisis contained" at the 10-turn cap.
-        "public_signals":      [active.get("exploit_story", "")] if active.get("exploit_story") else [],
-        "reporter_published":  False,
-        "crisis_resolved":     False,
+        "public_signals":         [active.get("exploit_story", "")] if active.get("exploit_story") else [],
+        "reporter_published":     False,
+        "crisis_resolved":        False,
     }
 
     logger.info("Crisis started session=%s finding=%s", session_id, finding_id)

@@ -3,15 +3,70 @@ import logging
 
 from langchain_openai import ChatOpenAI
 
+from chroma_utils import search_codebase
+
 logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o-mini"
 _LLM_TIMEOUT = 30.0   # seconds — keeps a stuck call from blocking the reporter loop
+_CODE_CHUNKS = 4
+_MAX_CODE_CHARS = 600   # per chunk — keep prompt small
 
 _LEAK_TRIGGER_WORDS = ["breach", "leaked", "exposed", "customers affected", "data exposed"]
 
 
-def make_crisis_agent(name: str, system_prompt: str, leaks: bool = True):
+def _fetch_code_context(state: dict, finding: dict) -> str:
+    """
+    Pull the actual offending file's code from the RAG collection so the agent
+    can cite real symbols, line numbers, and patterns instead of inventing
+    structure from the finding title alone. Returns '' if anything goes wrong
+    or there's no collection (e.g. crisis triggered from a synthetic finding).
+    """
+    collection = state.get("chroma_collection_name")
+    file_path  = finding.get("file") or ""
+    if not collection or not file_path:
+        return ""
+
+    try:
+        # Two queries: one targeted at the file path, one semantic on the title.
+        # Merge + dedup so we get both the right file AND topically related chunks.
+        path_hits  = search_codebase(collection, file_path, n_results=_CODE_CHUNKS)
+        topic_hits = search_codebase(
+            collection,
+            f"{finding.get('title', '')} {file_path}",
+            n_results=_CODE_CHUNKS,
+        )
+    except Exception as exc:
+        logger.warning("crisis: code-context lookup failed for %s: %s", file_path, exc)
+        return ""
+
+    seen: set[str] = set()
+    chunks: list[dict] = []
+    for c in path_hits + topic_hits:
+        key = f"{c['filepath']}::{c['content'][:80]}"
+        if key in seen:
+            continue
+        seen.add(key)
+        chunks.append(c)
+        if len(chunks) >= _CODE_CHUNKS:
+            break
+
+    if not chunks:
+        return ""
+
+    rendered = "\n\n".join(
+        f"--- {c['filepath']} ---\n{c['content'][:_MAX_CODE_CHARS]}"
+        for c in chunks
+    )
+    return f"\n\nRELEVANT CODE FROM THE REPO (use this to ground your response — cite real symbols, do not invent):\n{rendered}"
+
+
+def make_crisis_agent(
+    name: str,
+    system_prompt: str,
+    leaks: bool = True,
+    with_code_context: bool = False,
+):
     """
     Factory: returns an async LangGraph node function for a crisis role-play agent.
 
@@ -24,6 +79,8 @@ def make_crisis_agent(name: str, system_prompt: str, leaks: bool = True):
       - crisis_messages: rolling transcript
       - crisis_turn: turn counter
       - public_signals: messages a Reporter could leak (filled when leaks=True)
+      - chroma_collection_name (when with_code_context=True): RAG store to
+        query for the offending file's actual source.
     """
 
     async def node(state: dict) -> dict:
@@ -47,10 +104,14 @@ def make_crisis_agent(name: str, system_prompt: str, leaks: bool = True):
             "exploit_story": "Details pending engineering review.",
         }
 
+        code_context = _fetch_code_context(state, finding) if with_code_context else ""
+
         prompt = (
             f"{system_prompt}\n\n"
             f"INCIDENT: {finding.get('title','')} ({finding.get('severity','')})\n"
-            f"EXPLOIT: {finding.get('exploit_story','')}\n\n"
+            f"FILE: {finding.get('file','')}:{finding.get('line_start','')}\n"
+            f"EXPLOIT: {finding.get('exploit_story','')}"
+            f"{code_context}\n\n"
             f"CONVERSATION SO FAR:\n{history}\n\n"
             f"Respond as {name} in 2-4 sentences. Do not break character."
         )
