@@ -22,6 +22,23 @@ Multi-agent repo intelligence system. Paste a GitHub URL → 4 agents run in par
 
 Stack: FastAPI · LangGraph · OpenAI GPT-4o-mini · ChromaDB · React · Mermaid · semgrep
 
+## Screenshots
+
+**Architecture** — file tree converted to a Mermaid diagram in one LLM call.
+![Architecture tab](docs/1-architecture.png)
+
+**API Docs** — every endpoint extracted with regex pre-filter + LLM, deduped across files.
+![API Docs tab](docs/2-api-docs.png)
+
+**Security** — semgrep scan + LLM exec-summary triage. High/Critical findings get an "Open Crisis Room" button.
+![Security tab](docs/3-security.png)
+
+**Crisis Room** — CEO/Legal/Engineering role-play live over WebSocket. Engineering pulls the offending file from the RAG store before responding.
+![Crisis Room](docs/4-crisis-room.png)
+
+**Chat** — ChromaDB-backed RAG over the embedded codebase, cites the files it pulled from.
+![Chat tab](docs/5-chat.png)
+
 ## Project layout
 
 ```
