@@ -1,0 +1,15 @@
+# Pinned to versions verified working as of 2026-05-10. langgraph and langchain
+# are pre-1.0 and break compatibility frequently — bump deliberately.
+fastapi[standard]==0.136.1
+uvicorn==0.46.0
+langgraph==1.1.10
+langchain==1.2.18
+langchain-openai==1.2.1
+langchain-text-splitters==1.1.2
+chromadb==1.5.9
+GitPython==3.1.50
+tiktoken==0.12.0
+python-dotenv==1.2.2
+diskcache==5.6.3
+websockets==16.0
+semgrep==1.162.0

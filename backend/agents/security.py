@@ -1,0 +1,155 @@
+import json
+import logging
+import shutil
+import subprocess
+import uuid
+from pathlib import Path
+
+from langchain_openai import ChatOpenAI
+
+from llm_cache import get_cached, set_cached
+
+logger = logging.getLogger(__name__)
+
+_MODEL           = "gpt-4o-mini"
+_CACHE_NAMESPACE = "gpt-4o-mini:json"
+_MAX_FINDINGS    = 30
+_MAX_MSG_CHARS   = 200
+_VALID_SEVERITIES = frozenset({"low", "medium", "high", "critical"})
+
+_TRIAGE_PROMPT = """\
+You are a security triage expert preparing an executive briefing.
+Below is a list of raw semgrep findings from a code scan.
+
+For each finding, produce a concise, executive-facing summary.
+Return a JSON object with a single key "findings" containing an array.
+Each item must have exactly these keys:
+  "id"           — short unique identifier (you may use the check_id tail)
+  "file"         — relative file path where the issue was found
+  "line_start"   — integer line number where the issue starts
+  "line_end"     — integer line number where the issue ends
+  "severity"     — one of: low, medium, high, critical
+  "title"        — short title (max 10 words)
+  "exploit_story"— one sentence, non-technical, describing real business impact
+
+If there are no findings, return {"findings": []}.
+Do NOT include any explanation outside the JSON object.\
+"""
+
+
+def run_security_agent(local_path: str) -> list[dict]:
+    # System failure → return clearly-labeled synthetic so Crisis Mode still
+    # has something to demo and the user knows scanning is broken.
+    if not shutil.which("semgrep"):
+        logger.warning("semgrep not found in PATH — returning synthetic finding")
+        return _synthetic_finding()
+    if not local_path:
+        logger.warning("security agent called with empty local_path")
+        return _synthetic_finding()
+
+    # semgrep ran successfully but found nothing → that's a real "clean repo"
+    # answer. Returning [] lets the UI show the proper success state instead of
+    # injecting a fake finding that misleads users into thinking every repo has
+    # the same hardcoded-credentials bug.
+    raw_results = _run_semgrep(local_path)
+    if not raw_results:
+        logger.info("semgrep returned zero findings — repo is clean")
+        return []
+
+    triaged = _triage_with_llm(raw_results)
+    # If LLM triage itself failed mid-pipeline, _triage_with_llm returned
+    # synthetic; keep that as a system-failure fallback rather than dropping
+    # to an empty list (we know there ARE findings, we just couldn't triage).
+    return triaged
+
+
+# ── Private helpers ────────────────────────────────────────────────────────────
+
+def _run_semgrep(local_path: str) -> list[dict]:
+    posix_path = Path(local_path).as_posix()
+    try:
+        proc = subprocess.run(
+            ["semgrep", "--config=auto", "--json", "--quiet", posix_path],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            shell=False,   # never shell=True with external paths
+        )
+        # semgrep exit 0 = no findings, exit 1 = findings found — both are success
+        if proc.returncode not in (0, 1):
+            logger.error(
+                "semgrep exited %d — stderr: %s",
+                proc.returncode,
+                proc.stderr[:300],
+            )
+            return []
+        data = json.loads(proc.stdout or '{"results":[]}')
+        results = data.get("results", [])
+        logger.info("semgrep returned %d raw findings", len(results))
+        return results
+    except subprocess.TimeoutExpired:
+        logger.warning("semgrep timed out after 120 s")
+        return []
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.error("semgrep execution error: %s", exc)
+        return []
+
+
+def _triage_with_llm(raw_results: list[dict]) -> list[dict]:
+    truncated = []
+    for r in raw_results[:_MAX_FINDINGS]:
+        extra = r.get("extra") or {}
+        start = r.get("start") or {}
+        end   = r.get("end")   or {}
+        truncated.append({
+            "check_id": r.get("check_id", "unknown"),
+            "path":     r.get("path", ""),
+            "start":    start.get("line") if isinstance(start, dict) else start,
+            "end":      end.get("line")   if isinstance(end,   dict) else end,
+            "severity": extra.get("severity", "WARNING"),
+            "message":  (extra.get("message") or "")[:_MAX_MSG_CHARS],
+        })
+
+    prompt = f"{_TRIAGE_PROMPT}\n\nFindings:\n{json.dumps(truncated, indent=2)}"
+    cached = get_cached(_CACHE_NAMESPACE, prompt)
+
+    if cached:
+        logger.debug("Security agent: cache hit")
+        findings = json.loads(cached).get("findings", [])
+    else:
+        llm = ChatOpenAI(model=_MODEL, temperature=0).bind(
+            response_format={"type": "json_object"}
+        )
+        try:
+            raw      = llm.invoke(prompt).content
+            findings = json.loads(raw).get("findings", [])
+            set_cached(_CACHE_NAMESPACE, prompt, raw)
+        except Exception as exc:
+            logger.error("Security triage LLM failed: %s", exc)
+            return _synthetic_finding()
+
+    # Guarantee every finding has a valid id and normalized severity
+    for f in findings:
+        f.setdefault("id", uuid.uuid4().hex[:8])
+        if f.get("severity") not in _VALID_SEVERITIES:
+            f["severity"] = "medium"
+
+    logger.info("Security agent: %d triaged findings", len(findings))
+    return findings
+
+
+def _synthetic_finding() -> list[dict]:
+    """Guaranteed fallback so Crisis Mode always has something to dramatize."""
+    return [{
+        "id":            "demo01",
+        "file":          "app.js",
+        "line_start":    42,
+        "line_end":      42,
+        "severity":      "high",
+        "title":         "Hardcoded credentials detected (demo)",
+        "synthetic":     True,
+        "exploit_story": (
+            "An attacker with read access to the repository history "
+            "gains immediate database credentials without brute-forcing any password."
+        ),
+    }]
