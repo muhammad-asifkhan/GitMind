@@ -25,19 +25,19 @@ Stack: FastAPI · LangGraph · OpenAI GPT-4o-mini · ChromaDB · React · Mermai
 ## Screenshots
 
 **Architecture** — file tree converted to a Mermaid diagram in one LLM call.
-![Architecture tab](docs/1-architecture.png)
+![Architecture tab](https://github.com/muhammad-asifkhan/GitMind/raw/main/docs/1-architecture.png)
 
 **API Docs** — every endpoint extracted with regex pre-filter + LLM, deduped across files.
-![API Docs tab](docs/2-api-docs.png)
+![API Docs tab](https://github.com/muhammad-asifkhan/GitMind/raw/main/docs/2-api-docs.png)
 
 **Security** — semgrep scan + LLM exec-summary triage. High/Critical findings get an "Open Crisis Room" button.
-![Security tab](docs/3-security.png)
+![Security tab](https://github.com/muhammad-asifkhan/GitMind/raw/main/docs/3-security.png)
 
 **Crisis Room** — CEO/Legal/Engineering role-play live over WebSocket. Engineering pulls the offending file from the RAG store before responding.
-![Crisis Room](docs/4-crisis-room.png)
+![Crisis Room](https://github.com/muhammad-asifkhan/GitMind/raw/main/docs/4-crisis-room.png)
 
 **Chat** — ChromaDB-backed RAG over the embedded codebase, cites the files it pulled from.
-![Chat tab](docs/5-chat.png)
+![Chat tab](https://github.com/muhammad-asifkhan/GitMind/raw/main/docs/5-chat.png)
 
 ## Project layout
 
