@@ -1,0 +1,40 @@
+# fly.toml — GitMind backend deploy config for Fly.io
+#
+# Deploy:
+#   fly auth login
+#   fly launch --no-deploy --copy-config --name <unique-name>   # first time only
+#   fly secrets set OPENAI_API_KEY=sk-... CORS_ORIGINS=https://your-frontend.vercel.app
+#   fly deploy
+#
+# The frontend (Vercel) will reach this at https://<app-name>.fly.dev
+
+app = "gitmind-backend"  # ⚠ this name must be globally unique — rename before first launch
+primary_region = "iad"   # US East (Ashburn). Change to your nearest region: lhr, fra, syd, sin, etc.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8001"
+  CHROMA_DIR = "/data/chroma_db"
+
+[http_service]
+  internal_port = 8001
+  force_https = true
+  # Scale to zero when idle to stay inside Fly's free trial allowance.
+  # First request after sleep takes ~5-10s to wake the machine.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"   # ChromaDB + langchain + semgrep need >256mb to not OOM
+
+# Persistent volume for ChromaDB so embeddings survive machine restarts.
+# Size 1gb is well inside the free tier allowance.
+[[mounts]]
+  source = "chroma_data"
+  destination = "/data"
+  initial_size = "1gb"
